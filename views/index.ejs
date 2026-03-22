@@ -53,7 +53,7 @@
 
     </form>
 
-    <% if (fetchResult) { %>
+    <% if (typeof fetchResult !== 'undefined' && fetchResult) { %>
       <section class="card">
         <h2>Fetched Post</h2>
         <p><strong>Status:</strong> <%= fetchResult.status %></p>
@@ -67,7 +67,7 @@
       </section>
     <% } %>
 
-    <% if (result) { %>
+    <% if (typeof result !== 'undefined' && result) { %>
       <section class="card">
         <h2>Result</h2>
         <p><strong>Mode:</strong> <%= result.mode %></p>
