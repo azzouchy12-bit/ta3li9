@@ -66,9 +66,44 @@ async function connectBrowser(log) {
 
 async function getOrCreatePage(browser, mode) {
   if (mode === "cdp") {
-    const context = browser.contexts()[0] || (await browser.newContext());
-    const page = context.pages()[0] || (await context.newPage());
-    return { context, page };
+    const contexts = browser.contexts();
+    let selectedContext = contexts[0] || null;
+    let selectedPage = null;
+
+    // Prefer any existing Facebook tab across all CDP contexts.
+    for (const ctx of contexts) {
+      const pages = ctx.pages();
+      const fbPage = pages.find((p) => /facebook\.com/i.test(p.url() || ""));
+      if (fbPage) {
+        selectedContext = ctx;
+        selectedPage = fbPage;
+        break;
+      }
+    }
+
+    // Fallback: pick any existing non-empty context page (last page is usually the active tab).
+    if (!selectedPage) {
+      for (const ctx of contexts) {
+        const pages = ctx.pages();
+        if (pages.length > 0) {
+          selectedContext = ctx;
+          selectedPage = pages[pages.length - 1];
+          break;
+        }
+      }
+    }
+
+    if (!selectedContext) {
+      selectedContext = await browser.newContext();
+    }
+
+    if (!selectedPage) {
+      throw new Error(
+        "No open Chrome tab found for CDP. Open a Facebook tab in the debug Chrome window first, then retry."
+      );
+    }
+
+    return { context: selectedContext, page: selectedPage };
   }
 
   const context = await browser.newContext({
