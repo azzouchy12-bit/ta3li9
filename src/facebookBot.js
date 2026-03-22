@@ -297,6 +297,75 @@ async function sendReply(page, button, replyText, delayMs) {
   }
 }
 
+async function extractPostPreview(page) {
+  const extracted = await page.evaluate(() => {
+    const getMeta = (prop, attr = "property") => {
+      const selector = `meta[${attr}="${prop}"]`;
+      const value = document.querySelector(selector)?.getAttribute("content") || "";
+      return value.trim();
+    };
+
+    const ogTitle = getMeta("og:title");
+    const ogDescription = getMeta("og:description");
+
+    const firstReadableText = Array.from(document.querySelectorAll("div[dir='auto']"))
+      .map((el) => (el.textContent || "").replace(/\s+/g, " ").trim())
+      .find((text) => text.length >= 30 && text.length <= 500);
+
+    return {
+      ogTitle,
+      ogDescription,
+      firstReadableText: firstReadableText || ""
+    };
+  });
+
+  const pageTitle = (await page.title()).trim();
+
+  return {
+    title: extracted.ogTitle || pageTitle,
+    description: extracted.ogDescription || "",
+    snippet: extracted.firstReadableText || ""
+  };
+}
+
+async function fetchPostInfo({ postUrl, log }) {
+  const { browser, mode } = await connectBrowser(log);
+  let context = null;
+
+  try {
+    const result = await getOrCreatePage(browser, mode);
+    context = result.context;
+    const { page } = result;
+
+    const cookies = loadCookiesFromEnv(log);
+    if (cookies.length > 0) {
+      await context.addCookies(cookies);
+      log("Injected cookies into browser context.");
+    }
+
+    log(`Fetching post URL: ${postUrl}`);
+    await page.goto(postUrl, { waitUntil: "domcontentloaded", timeout: 90000 });
+    await page.waitForTimeout(2500);
+    await assertLoggedIn(page);
+
+    const preview = await extractPostPreview(page);
+
+    return {
+      mode,
+      status: "ok",
+      finalUrl: page.url(),
+      ...preview
+    };
+  } finally {
+    if (mode === "isolated") {
+      if (context) {
+        await context.close().catch(() => {});
+      }
+      await browser.close().catch(() => {});
+    }
+  }
+}
+
 async function runAutoReply({ postUrl, replies, maxComments, delayMs, log }) {
   const processedKeys = new Set();
   let repliedCount = 0;
@@ -390,5 +459,6 @@ async function runAutoReply({ postUrl, replies, maxComments, delayMs, log }) {
 }
 
 module.exports = {
-  runAutoReply
+  runAutoReply,
+  fetchPostInfo
 };

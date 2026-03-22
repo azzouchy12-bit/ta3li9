@@ -88,11 +88,28 @@ button {
   font-weight: 600;
 }
 
+button.alt {
+  background: #ecf3ff;
+  color: #16429f;
+  border: 1px solid #b8cdf7;
+}
+
 button.secondary {
   width: auto;
   margin: 0;
   background: #5e6673;
   padding-inline: 14px;
+}
+
+.action-row {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.action-row button {
+  margin-top: 0;
 }
 
 .row {
@@ -131,6 +148,7 @@ button.secondary {
 }
 
 @media (max-width: 700px) {
+  .action-row,
   .row {
     grid-template-columns: 1fr;
   }

@@ -3,7 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const path = require("path");
 const session = require("express-session");
-const { runAutoReply } = require("./src/facebookBot");
+const { runAutoReply, fetchPostInfo } = require("./src/facebookBot");
 
 const app = express();
 
@@ -47,6 +47,24 @@ function defaultFormData() {
   };
 }
 
+function buildFormData(req) {
+  return {
+    postUrl: (req.body.postUrl || "").trim(),
+    repliesText: req.body.repliesText || "",
+    maxComments: Number(req.body.maxComments || 200),
+    delayMs: Number(req.body.delayMs || 1200)
+  };
+}
+
+function renderIndex(res, { formData, result = null, fetchResult = null, error = null }) {
+  return res.render("index", {
+    formData,
+    result,
+    fetchResult,
+    error
+  });
+}
+
 app.get("/login", (req, res) => {
   if (req.session?.authenticated) {
     return res.redirect("/");
@@ -70,20 +88,80 @@ app.post("/logout", (req, res) => {
 });
 
 app.get("/", requireAuth, (req, res) => {
-  return res.render("index", {
+  return renderIndex(res, {
     formData: defaultFormData(),
     result: null,
+    fetchResult: null,
     error: null
   });
 });
 
-app.post("/run", requireAuth, async (req, res) => {
-  const formData = {
-    postUrl: (req.body.postUrl || "").trim(),
-    repliesText: req.body.repliesText || "",
-    maxComments: Number(req.body.maxComments || 200),
-    delayMs: Number(req.body.delayMs || 1200)
+app.post("/fetch-post", requireAuth, async (req, res) => {
+  const formData = buildFormData(req);
+
+  if (!formData.postUrl) {
+    return renderIndex(res.status(400), {
+      formData,
+      result: null,
+      fetchResult: null,
+      error: "Post URL is required."
+    });
+  }
+
+  if (runInProgress) {
+    return renderIndex(res.status(409), {
+      formData,
+      result: null,
+      fetchResult: null,
+      error: "Another task is in progress. Wait until it finishes."
+    });
+  }
+
+  runInProgress = true;
+  const logs = [];
+  const log = (message) => {
+    const timestamp = new Date().toISOString();
+    logs.push(`[${timestamp}] ${message}`);
   };
+
+  try {
+    const fetched = await fetchPostInfo({
+      postUrl: formData.postUrl,
+      log
+    });
+
+    return renderIndex(res, {
+      formData,
+      result: null,
+      fetchResult: {
+        ...fetched,
+        logs
+      },
+      error: null
+    });
+  } catch (error) {
+    log(`Fetch failed: ${error.message}`);
+    return renderIndex(res.status(500), {
+      formData,
+      result: null,
+      fetchResult: {
+        status: "failed",
+        mode: "failed",
+        finalUrl: formData.postUrl,
+        title: "",
+        description: "",
+        snippet: "",
+        logs
+      },
+      error: error.message
+    });
+  } finally {
+    runInProgress = false;
+  }
+});
+
+app.post("/run", requireAuth, async (req, res) => {
+  const formData = buildFormData(req);
 
   const replies = formData.repliesText
     .split(/\r?\n/)
@@ -91,41 +169,46 @@ app.post("/run", requireAuth, async (req, res) => {
     .filter(Boolean);
 
   if (!formData.postUrl) {
-    return res.status(400).render("index", {
+    return renderIndex(res.status(400), {
       formData,
       result: null,
+      fetchResult: null,
       error: "Post URL is required."
     });
   }
 
   if (replies.length === 0) {
-    return res.status(400).render("index", {
+    return renderIndex(res.status(400), {
       formData,
       result: null,
+      fetchResult: null,
       error: "Add at least one reply line."
     });
   }
 
   if (!Number.isFinite(formData.maxComments) || formData.maxComments < 1) {
-    return res.status(400).render("index", {
+    return renderIndex(res.status(400), {
       formData,
       result: null,
+      fetchResult: null,
       error: "maxComments must be a number greater than 0."
     });
   }
 
   if (!Number.isFinite(formData.delayMs) || formData.delayMs < 0) {
-    return res.status(400).render("index", {
+    return renderIndex(res.status(400), {
       formData,
       result: null,
+      fetchResult: null,
       error: "delayMs must be 0 or greater."
     });
   }
 
   if (runInProgress) {
-    return res.status(409).render("index", {
+    return renderIndex(res.status(409), {
       formData,
       result: null,
+      fetchResult: null,
       error: "Another run is still in progress. Wait until it finishes."
     });
   }
@@ -146,17 +229,18 @@ app.post("/run", requireAuth, async (req, res) => {
       log
     });
 
-    return res.render("index", {
+    return renderIndex(res, {
       formData,
       result: {
         ...result,
         logs
       },
+      fetchResult: null,
       error: null
     });
   } catch (error) {
     log(`Run failed: ${error.message}`);
-    return res.status(500).render("index", {
+    return renderIndex(res.status(500), {
       formData,
       result: {
         mode: "failed",
@@ -165,6 +249,7 @@ app.post("/run", requireAuth, async (req, res) => {
         stoppedReason: "error",
         logs
       },
+      fetchResult: null,
       error: error.message
     });
   } finally {

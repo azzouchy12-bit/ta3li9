@@ -32,6 +32,11 @@
       <label for="postUrl">Facebook Post URL</label>
       <input id="postUrl" name="postUrl" type="url" required value="<%= formData.postUrl %>" />
 
+      <div class="action-row">
+        <button type="submit" formaction="/fetch-post" formmethod="post" class="alt">Fetch Post</button>
+        <button type="submit">Start Auto Reply</button>
+      </div>
+
       <label for="repliesText">Reply lines (100+ lines supported)</label>
       <textarea id="repliesText" name="repliesText" rows="16" spellcheck="false"><%= formData.repliesText %></textarea>
 
@@ -46,8 +51,21 @@
         </div>
       </div>
 
-      <button type="submit">Start Auto Reply</button>
     </form>
+
+    <% if (fetchResult) { %>
+      <section class="card">
+        <h2>Fetched Post</h2>
+        <p><strong>Status:</strong> <%= fetchResult.status %></p>
+        <p><strong>Mode:</strong> <%= fetchResult.mode %></p>
+        <p><strong>Final URL:</strong> <%= fetchResult.finalUrl %></p>
+        <p><strong>Title:</strong> <%= fetchResult.title || 'N/A' %></p>
+        <p><strong>Description:</strong> <%= fetchResult.description || 'N/A' %></p>
+        <p><strong>Snippet:</strong> <%= fetchResult.snippet || 'N/A' %></p>
+        <h3>Logs</h3>
+        <pre class="logs"><%= fetchResult.logs.join('\n') %></pre>
+      </section>
+    <% } %>
 
     <% if (result) { %>
       <section class="card">
