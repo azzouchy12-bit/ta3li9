@@ -147,6 +147,14 @@ button.secondary {
   max-height: 300px;
 }
 
+.comments-box {
+  width: 100%;
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 700px) {
   .action-row,
   .row {

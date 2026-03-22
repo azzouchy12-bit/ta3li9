@@ -62,6 +62,13 @@
         <p><strong>Title:</strong> <%= fetchResult.title || 'N/A' %></p>
         <p><strong>Description:</strong> <%= fetchResult.description || 'N/A' %></p>
         <p><strong>Snippet:</strong> <%= fetchResult.snippet || 'N/A' %></p>
+        <p><strong>Comments found:</strong> <%= fetchResult.commentsCount || 0 %></p>
+
+        <% if (fetchResult.comments && fetchResult.comments.length > 0) { %>
+          <label for="fetchedComments"><strong>Fetched comments list</strong></label>
+          <textarea id="fetchedComments" class="comments-box" rows="14" readonly><%= fetchResult.comments.map((comment, index) => `${index + 1}. ${comment}`).join('\n') %></textarea>
+        <% } %>
+
         <h3>Logs</h3>
         <pre class="logs"><%= fetchResult.logs.join('\n') %></pre>
       </section>

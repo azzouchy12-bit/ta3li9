@@ -1,6 +1,7 @@
 const { chromium } = require("playwright");
 
 const DEFAULT_MAX_IDLE_LOOPS = 6;
+const DEFAULT_MAX_FETCH_COMMENTS = Number(process.env.FETCH_MAX_COMMENTS || 1500);
 const REPLY_TEXT_PATTERN = /\b(reply|رد|répondre|responder|rispondi|antworten)\b/i;
 const LOAD_MORE_PATTERN = /(view( more)? comments|see more comments|عرض المزيد|المزيد من التعليقات|plus de commentaires|ver mas comentarios|mostra altri commenti)/i;
 const CONTEXT_ERROR_PATTERN =
@@ -297,6 +298,61 @@ async function sendReply(page, button, replyText, delayMs) {
   }
 }
 
+async function getCommentText(button) {
+  try {
+    return await button.evaluate((el) => {
+      const normalize = (value) => (value || "").replace(/\s+/g, " ").trim();
+
+      const uiPattern =
+        /^(like|reply|replies|share|edit|delete|view( more)? replies|see translation|most relevant|all comments|write a comment|comment|minutes?|hours?|days?|اعجاب|إعجاب|رد|الرد|ردود|عرض المزيد من الردود|عرض الترجمة|تعليق|تعليقات|حذف|تعديل)$/i;
+
+      const container =
+        el.closest("[data-commentid]") ||
+        el.closest("div[role='article']") ||
+        el.closest("li") ||
+        el.parentElement;
+
+      if (!container) {
+        return "";
+      }
+
+      const lineNodes = container.querySelectorAll("div[dir='auto'], span[dir='auto']");
+      const uniqueLines = [];
+      const seen = new Set();
+
+      for (const node of lineNodes) {
+        const text = normalize(node.textContent);
+        if (!text || text.length < 2 || text.length > 420) {
+          continue;
+        }
+        if (uiPattern.test(text)) {
+          continue;
+        }
+        if (seen.has(text)) {
+          continue;
+        }
+        seen.add(text);
+        uniqueLines.push(text);
+      }
+
+      if (uniqueLines.length > 0) {
+        return uniqueLines.join(" ").slice(0, 1200);
+      }
+
+      const fallback = normalize(container.textContent);
+      if (!fallback || fallback.length < 2) {
+        return "";
+      }
+      return fallback.slice(0, 1200);
+    });
+  } catch (error) {
+    if (isTransientContextError(error)) {
+      return "";
+    }
+    throw error;
+  }
+}
+
 async function extractPostPreview(page) {
   const extracted = await page.evaluate(() => {
     const getMeta = (prop, attr = "property") => {
@@ -328,7 +384,7 @@ async function extractPostPreview(page) {
   };
 }
 
-async function fetchPostInfo({ postUrl, log }) {
+async function fetchPostInfo({ postUrl, log, maxFetchComments = DEFAULT_MAX_FETCH_COMMENTS }) {
   const { browser, mode } = await connectBrowser(log);
   let context = null;
 
@@ -349,11 +405,63 @@ async function fetchPostInfo({ postUrl, log }) {
     await assertLoggedIn(page);
 
     const preview = await extractPostPreview(page);
+    const commentsByKey = new Map();
+    let idleLoops = 0;
+
+    while (idleLoops < DEFAULT_MAX_IDLE_LOOPS + 3 && commentsByKey.size < maxFetchComments) {
+      try {
+        await assertLoggedIn(page);
+        await clickLoadMoreButtons(page);
+
+        const replyButtons = await getReplyButtons(page);
+        let addedThisLoop = 0;
+
+        for (const button of replyButtons) {
+          if (commentsByKey.size >= maxFetchComments) {
+            break;
+          }
+
+          const key = await getCommentKey(button);
+          if (!key || commentsByKey.has(key)) {
+            continue;
+          }
+
+          const text = await getCommentText(button);
+          if (!text) {
+            continue;
+          }
+
+          commentsByKey.set(key, text);
+          addedThisLoop += 1;
+        }
+
+        if (addedThisLoop === 0) {
+          idleLoops += 1;
+        } else {
+          idleLoops = 0;
+          log(`Fetched ${commentsByKey.size} comment(s) so far...`);
+        }
+      } catch (error) {
+        if (!isTransientContextError(error)) {
+          throw error;
+        }
+        log("Navigation detected while fetching comments. Retrying...");
+        await page.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => {});
+      }
+
+      await page.mouse.wheel(0, 2300);
+      await page.waitForTimeout(900);
+    }
+
+    const comments = Array.from(commentsByKey.values());
+    log(`Fetch completed with ${comments.length} comment(s).`);
 
     return {
       mode,
       status: "ok",
       finalUrl: page.url(),
+      comments,
+      commentsCount: comments.length,
       ...preview
     };
   } finally {

@@ -151,6 +151,8 @@ app.post("/fetch-post", requireAuth, async (req, res) => {
         title: "",
         description: "",
         snippet: "",
+        comments: [],
+        commentsCount: 0,
         logs
       },
       error: error.message
