@@ -1,0 +1,21 @@
+{
+  "name": "facebook-auto-reply-railway",
+  "version": "1.0.0",
+  "description": "Password-protected Facebook comment auto-reply tool",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "postinstall": "playwright install chromium"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "playwright": "^1.53.2"
+  }
+}

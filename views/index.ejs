@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auto Reply Panel</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="container">
+    <div class="topbar">
+      <h1>Auto Reply Panel</h1>
+      <form method="post" action="/logout">
+        <button type="submit" class="secondary">Logout</button>
+      </form>
+    </div>
+
+    <p class="muted">
+      Paste a Facebook post URL, then add one reply per line. Replies rotate automatically (line 1, line 2, ... then back to line 1).
+    </p>
+
+    <div class="alert warn">
+      In Railway mode, the bot runs in a cloud browser session, not your local Chrome profile.
+      If you need the same already-logged Chrome session, run locally with CHROME_CDP_URL.
+    </div>
+
+    <% if (error) { %>
+      <div class="alert error"><%= error %></div>
+    <% } %>
+
+    <form method="post" action="/run" class="card">
+      <label for="postUrl">Facebook Post URL</label>
+      <input id="postUrl" name="postUrl" type="url" required value="<%= formData.postUrl %>" />
+
+      <label for="repliesText">Reply lines (100+ lines supported)</label>
+      <textarea id="repliesText" name="repliesText" rows="16" spellcheck="false"><%= formData.repliesText %></textarea>
+
+      <div class="row">
+        <div>
+          <label for="maxComments">Max comments to reply</label>
+          <input id="maxComments" name="maxComments" type="number" min="1" value="<%= formData.maxComments %>" />
+        </div>
+        <div>
+          <label for="delayMs">Delay between replies (ms)</label>
+          <input id="delayMs" name="delayMs" type="number" min="0" value="<%= formData.delayMs %>" />
+        </div>
+      </div>
+
+      <button type="submit">Start Auto Reply</button>
+    </form>
+
+    <% if (result) { %>
+      <section class="card">
+        <h2>Result</h2>
+        <p><strong>Mode:</strong> <%= result.mode %></p>
+        <p><strong>Replied:</strong> <%= result.repliedCount %></p>
+        <p><strong>Scanned candidates:</strong> <%= result.scannedCandidates %></p>
+        <p><strong>Stop reason:</strong> <%= result.stoppedReason %></p>
+
+        <h3>Logs</h3>
+        <pre class="logs"><%= result.logs.join('\n') %></pre>
+      </section>
+    <% } %>
+  </main>
+</body>
+</html>

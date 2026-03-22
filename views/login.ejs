@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="container narrow">
+    <h1>Facebook Auto Reply</h1>
+    <p class="muted">Enter password to open the control panel.</p>
+
+    <% if (error) { %>
+      <div class="alert error"><%= error %></div>
+    <% } %>
+
+    <form method="post" action="/login" class="card">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required />
+      <button type="submit">Login</button>
+    </form>
+  </main>
+</body>
+</html>
