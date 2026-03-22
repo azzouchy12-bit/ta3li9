@@ -185,16 +185,110 @@ async function getCommentKey(button) {
   }
 }
 
+async function isReplyTextboxFocused(page) {
+  return page.evaluate(() => {
+    const active = document.activeElement;
+    if (!active) {
+      return false;
+    }
+    if (active.matches?.("div[role='textbox'][contenteditable='true']")) {
+      return true;
+    }
+    return Boolean(active.closest?.("div[role='textbox'][contenteditable='true']"));
+  });
+}
+
+async function findClosestVisibleTextbox(page, button) {
+  const buttonBox = await button.boundingBox().catch(() => null);
+  const textboxes = await page.$$("div[role='textbox'][contenteditable='true']");
+
+  let bestTextbox = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  let bestDistanceY = Number.POSITIVE_INFINITY;
+
+  for (const textbox of textboxes) {
+    try {
+      const visible = await textbox.isVisible();
+      if (!visible) {
+        continue;
+      }
+
+      const textBoxRect = await textbox.boundingBox();
+      if (!textBoxRect) {
+        continue;
+      }
+
+      if (!buttonBox) {
+        if (!bestTextbox) {
+          bestTextbox = textbox;
+        }
+        continue;
+      }
+
+      const buttonCenterX = buttonBox.x + buttonBox.width / 2;
+      const buttonCenterY = buttonBox.y + buttonBox.height / 2;
+      const textCenterX = textBoxRect.x + textBoxRect.width / 2;
+      const textCenterY = textBoxRect.y + textBoxRect.height / 2;
+
+      const distanceX = Math.abs(textCenterX - buttonCenterX);
+      const distanceY = Math.abs(textCenterY - buttonCenterY);
+      const score = distanceY + distanceX * 0.35;
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestDistanceY = distanceY;
+        bestTextbox = textbox;
+      }
+    } catch (error) {
+      if (isTransientContextError(error)) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return { textbox: bestTextbox, distanceY: bestDistanceY };
+}
+
 async function sendReply(page, button, replyText, delayMs) {
   try {
+    const buttonBox = await button.boundingBox().catch(() => null);
     await button.scrollIntoViewIfNeeded();
     await button.click({ timeout: 2500 });
-    await page.waitForTimeout(350);
+    await page.waitForTimeout(500);
 
-    const replyBox = page.locator("div[role='textbox'][contenteditable='true']").last();
-    await replyBox.waitFor({ state: "visible", timeout: 2500 });
-    await replyBox.click({ timeout: 2500 });
-    await replyBox.fill(replyText);
+    let focused = await isReplyTextboxFocused(page).catch(() => false);
+    let pickedReplyBox = null;
+
+    if (!focused) {
+      const closest = await findClosestVisibleTextbox(page, button);
+      pickedReplyBox = closest.textbox;
+
+      // Guard rail: skip if textbox is far away from clicked "Reply" button.
+      if (buttonBox && Number.isFinite(closest.distanceY) && closest.distanceY > 360) {
+        return false;
+      }
+
+      if (pickedReplyBox) {
+        await pickedReplyBox.click({ timeout: 2500 });
+        focused = await isReplyTextboxFocused(page).catch(() => false);
+      }
+    }
+
+    if (!focused && !pickedReplyBox) {
+      return false;
+    }
+
+    if (pickedReplyBox) {
+      try {
+        await pickedReplyBox.fill(replyText, { timeout: 2500 });
+      } catch {
+        await page.keyboard.type(replyText, { delay: 15 });
+      }
+    } else {
+      await page.keyboard.type(replyText, { delay: 15 });
+    }
+
     await page.keyboard.press("Enter");
     await page.waitForTimeout(delayMs);
     return true;
