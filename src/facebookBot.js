@@ -4,6 +4,41 @@ const DEFAULT_MAX_IDLE_LOOPS = 6;
 const REPLY_TEXT_PATTERN = /\b(reply|رد|répondre|responder|rispondi|antworten)\b/i;
 const LOAD_MORE_PATTERN = /(view( more)? comments|see more comments|عرض المزيد|المزيد من التعليقات|plus de commentaires|ver mas comentarios|mostra altri commenti)/i;
 
+function loadCookiesFromEnv(log) {
+  const raw = process.env.FACEBOOK_COOKIES_JSON;
+  if (!raw || !raw.trim()) {
+    return [];
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("FACEBOOK_COOKIES_JSON is not valid JSON.");
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("FACEBOOK_COOKIES_JSON must be a JSON array of cookies.");
+  }
+
+  const cookies = parsed
+    .filter((cookie) => cookie && typeof cookie === "object")
+    .map((cookie) => ({
+      name: cookie.name,
+      value: cookie.value,
+      domain: cookie.domain || ".facebook.com",
+      path: cookie.path || "/",
+      httpOnly: Boolean(cookie.httpOnly),
+      secure: cookie.secure !== false,
+      sameSite: cookie.sameSite || "Lax",
+      expires: typeof cookie.expires === "number" ? cookie.expires : -1
+    }))
+    .filter((cookie) => cookie.name && cookie.value && cookie.domain);
+
+  log(`Loaded ${cookies.length} Facebook cookie(s) from env.`);
+  return cookies;
+}
+
 async function connectBrowser(log) {
   const cdpUrl = process.env.CHROME_CDP_URL;
   if (cdpUrl) {
@@ -146,6 +181,12 @@ async function runAutoReply({ postUrl, replies, maxComments, delayMs, log }) {
     const result = await getOrCreatePage(browser, mode);
     context = result.context;
     const { page } = result;
+
+    const cookies = loadCookiesFromEnv(log);
+    if (cookies.length > 0) {
+      await context.addCookies(cookies);
+      log("Injected cookies into browser context.");
+    }
 
     log(`Opening post URL: ${postUrl}`);
     await page.goto(postUrl, { waitUntil: "domcontentloaded", timeout: 90000 });
