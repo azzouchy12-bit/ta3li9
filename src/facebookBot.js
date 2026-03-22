@@ -49,7 +49,7 @@ async function connectBrowser(log) {
   const cdpUrl = process.env.CHROME_CDP_URL;
   if (cdpUrl) {
     log(`Connecting to Chrome via CDP: ${cdpUrl}`);
-    const browser = await chromium.connectOverCDP(cdpUrl);
+    const browser = await chromium.connectOverCDP(cdpUrl, { timeout: 120000 });
     return { browser, mode: "cdp" };
   }
 
@@ -361,8 +361,8 @@ async function fetchPostInfo({ postUrl, log }) {
       if (context) {
         await context.close().catch(() => {});
       }
-      await browser.close().catch(() => {});
     }
+    await browser.close().catch(() => {});
   }
 }
 
@@ -453,8 +453,8 @@ async function runAutoReply({ postUrl, replies, maxComments, delayMs, log }) {
       if (context) {
         await context.close().catch(() => {});
       }
-      await browser.close().catch(() => {});
     }
+    await browser.close().catch(() => {});
   }
 }
 
